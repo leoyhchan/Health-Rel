@@ -1,0 +1,4 @@
+bs4
+nltk
+html5lib
+scikit-learn

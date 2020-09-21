@@ -2,18 +2,54 @@ import os
 import re
 import pickle
 import argparse
-import svmlight
+# import svmlight
 import numpy as np
 from bs4 import BeautifulSoup
-from nltk.corpus import stopwords
+from collections import Counter
 from sklearn import preprocessing
+from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
+from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics import f1_score
 from sklearn.datasets import dump_svmlight_file, load_svmlight_file
+
 
 STOPWORDS = set(stopwords.words("english"))
 NEW_WORDS = ["using", "show", "result", "large", "also", "iv", "one", "two", "new", "previously", "shown","http","layout","cell","www","dwlayoutemptycell","div"]
 STOPWORDS = STOPWORDS.union(STOPWORDS)
+COMM_LIST = ["buy","sell","cheap","deal","free","guarantee","shop","price"]
+
+def evaluate(predictions, cost_factor):
+    tp = 0
+    tn = 0
+    fp = 0
+    fn = 0
+    for a, b in zip(val,predictions):
+            if np.sign(a) == np.sign(b): # true
+                    if np.sign(a) == -1:
+                            tn +=1
+                    else:
+                            tp += 1
+            else: # false
+                    if np.sign(a) == 1:
+                            fn += 1
+                    else: 
+                            fp += 1
+
+    accuracies.append(weighted_accuracy(cost_factor, tn, tp, fn, fp)*100)
+    it += 1
+
+    predictions = np.array(predictions)
+    predictions[predictions<0] = -1
+    predictions[predictions>0] = 1
+    f1_micro.append(f1_score(val, predictions, average='micro'))
+    cl = f1_score(val, predictions, average=None)
+    f1_rel.append(cl[0])
+    f1_unrel.append(cl[1])
+
+    return accuracies, f1_micro, f1_rel, f1_unrel
+
 
 def svm_parse(filename):
     features,target = load_svmlight_file(filename)
@@ -37,9 +73,67 @@ def word_features(doc, vectorizer):
                 doc_to_list[index] = val/maximum
     return doc_to_list
 
-def features_calc(corpus, vectorizer):
-    for doc in corpus:
-        doc_features = word_features(doc, vectorizer)
+
+def count_commercial_keywords(filename, doc):
+    commercial_words = 0
+    with open(filename,encoding="utf-8",errors="ignore") as reader:
+            soup = BeautifulSoup(reader.read())
+            text = soup.get_text()
+            output = text.split(" ")
+            for line in output:
+                    for term in COMM_LIST:
+                            if term in line:
+                                    commercial_words += 1
+            doc = doc.split(" ")
+    return commercial_words/len(doc)
+
+
+def count_links(filename, z1):
+    with open(filename,encoding="utf-8",errors="ignore") as reader:
+        soup = BeautifulSoup(reader.read(),'html5lib')
+        links = Counter([x.get('href') for x in soup.findAll('a')])
+        links = links.most_common()
+        total = 0
+        external = 0
+        contact = 0
+        privacy = 0
+        commercial = 0
+        c_list = ["ContactUs", "ContactJudy", "Contact Us", "Contact Judy"]
+        p_list = ["PrivacyInformation", "PrivacyPolicy", "PrivacyStatement", "PrivacySecured", "Privacy Information", "Privacy Policy", "Privacy Statement", "Privacy Secured"]
+        for item in links:
+                total += item[1]
+                if item[0]: 
+                        if item[0].startswith(('http','ftp','www')):
+                                external += item[1]
+                        if any(ext in item[0] for ext in c_list):
+                                contact = 1
+                        if any(ext in item[0] for ext in p_list):
+                                privacy = 1
+                        if any(ext in item[0] for ext in COMM_LIST):
+                                commercial += item[1]
+        internal = total - external
+        if total:
+                commercial = commercial/total
+    return total/z1, external/z1, internal/z1, contact, privacy, commercial
+
+def features_calc(docs, corpus, vectorizer, features):
+    z1 = 200 # empirical observed standardisation value
+
+    for filename, doc in zip(docs, corpus):
+        doc_features = []
+        
+        if features == "link" or features == "all1" or features == "all2":
+            total, external, internal, contact, privacy, commercial = count_links(filename, z1)
+            doc_features.append(total, external, internal, contact, privacy, commercial)
+
+        if features == "comm" or features == "all1" or features == "all2":
+            commercial_words = count_commercial_keywords(filename, doc)
+            doc_features.append(commercial_words)
+
+        if features == "words1" or features == "words2" or features == "all1" or features == "all2":
+            words = word_features(doc, vectorizer)
+            doc_features.extend(words)
+
         yield doc_features
 
 def generate_vocabulary(corpus, min_df, dataset):
@@ -51,7 +145,7 @@ def generate_vocabulary(corpus, min_df, dataset):
     
     return vectorizer
 
-def normalize_text(line, stop_words, dataset):
+def normalize_text(line, stop_words, features):
     # Remove punctuations
     line = re.sub('[^a-zA-Z]', ' ', line)
     # Convert to lowercase
@@ -64,7 +158,7 @@ def normalize_text(line, stop_words, dataset):
     line = line.split()
     
     ## Removing stopwords
-    if dataset != "Sondhi":
+    if features != "words2" and features != "all2":
         line = [word for word in line if not word in stop_words]
     
     line = " ".join(line)
@@ -89,8 +183,9 @@ def generate_corpus(docs, stop_words, dataset):
             corpus.append(doc)
     return corpus
 
-def train_test_split_sondhi():
-    path1 = './reliable'
+def data_sondhi():
+    root = os.getcwd()
+    path1 = './datasets/Sondhi/reliable'
     os.chdir(path1)
     arr1 = os.listdir('.')
     path2 = '../unreliable'
@@ -100,57 +195,129 @@ def train_test_split_sondhi():
     Y = []
     for rel,unrel in zip(arr1,arr2):
             os.chdir('../reliable')
-            X.append('./reliable/'+rel)
+            X.append('./datasets/Sondhi/reliable/'+rel)
             Y.append(-1)
             os.chdir('../unreliable')
-            X.append('./unreliable/'+unrel)
+            X.append('./datasets/Sondhi/unreliable/'+unrel)
             Y.append(1)
-    os.chdir("../")
+    os.chdir(root)
     return np.array(X), np.array(Y)
 
-def train(dataset):
+def feature_set():
+    ext = False
+    opcion = 0
+    
+    while not ext:
+        print ("1. Link-based")
+        print ("2. Commercial")
+        print ("3. Word-based (with stopword removal)")
+        print ("4. Word-based (without stopword removal)")
+        print ("5. All (with stopword removal)")
+        print ("6. All (without stopword removal)")
+        option = int(input("Choose a feature set:"))
+    
+        if option == 1:
+            return "link"
+        elif option == 2:
+            return "comm"
+        elif option == 3:
+            return "words1"
+        elif option == 4:
+            return "words2"
+        elif option == 5:
+            return "all1"
+        elif option == 6:
+            return "all2"
+        else:
+            print ("Not valid option")
+
+def adapt_test_to_svmlight(aux):
+    test = []
+    val = []
+    for element in aux:
+        lst = list(element)
+        val.append(lst[0])
+        lst[0] = 0
+        element = tuple(lst)
+        test.append(element)
+    return test
+
+
+def train(dataset, dump, cost_factor):
     if dataset == "CLEF":
-        pass
+        n = 5
     
     elif dataset == "Sondhi":
-        X, Y = train_test_split_sondhi()
+        X, Y = data_sondhi()
         min_df = 1
-        cost_factor = 3
+        n = 5
     
     elif dataset == "Schwarz":
-        pass
         min_df = 0.5
-    
-    else:
-        print("No such dataset. Expected: CLEF, Sondhi or Schwarz")
+        n = 2
 
-    data = X
-    corpus = generate_corpus(data, STOPWORDS, dataset)
-    vectorizer = generate_vocabulary(corpus, min_df, dataset)
-    
-    if vectorizer:
-        pickle.dump(vectorizer, open("models/"+dataset+"/vocabulary.pkl", "wb"))
+    skf = StratifiedKFold(n_splits=n)
+    accuracies = []
+    it = 0
+    f1_micro = []
+    f1_rel = []
+    f1_unrel = []
 
-    data = features_calc(corpus, vectorizer)
-    target = Y
-    scaler_x = preprocessing.StandardScaler().fit(list(data)) # Standardisation
-    data = scaler_x.transform(list(data))
-    pickle.dump(scaler_x, open("models/"+dataset+"/scaler.pkl", "wb"))
 
-    if dataset != "CLEF":
-        dump_svmlight_file(data, target, 'train.txt')
+    for train_index, test_index in skf.split(X,Y):
+        data_train = X[train_index]
+        features = feature_set()
+        corpus_train = generate_corpus(data_train, STOPWORDS, features)
+        
+        vectorizer = generate_vocabulary(corpus_train, min_df, dataset)
+        if dump == "yes":
+            pickle.dump(vectorizer, open("models/"+dataset+"/vocabulary.pkl", "wb"))
+
+        data_train = features_calc(data_train, corpus_train, vectorizer, features)
+        target_train = Y[train_index]
+        scaler_x = preprocessing.StandardScaler().fit(list(data_train)) # Standardisation
+        data_train = scaler_x.transform(list(data_train))
+        if dump == "yes":
+            pickle.dump(scaler_x, open("models/"+dataset+"/scaler.pkl", "wb"))
+
+        data_test = X[test_index]
+        corpus_test = generate_corpus(data_test, STOPWORDS)
+        data_test = features_calc(data_test, corpus_test, vectorizer, features)
+        target_test  = Y[test_index]
+        data_test = scaler_x.transform(list(data_test))
+
+        dump_svmlight_file(data_train, target_train, 'train.txt')
+        dump_svmlight_file(data_test,target_test,'test.txt')
+
         train = svm_parse('train.txt')
+        aux = svm_parse('test.txt')
+        test = adapt_test_to_svmlight(aux)
+        os.remove('train.txt')
+        os.remove('test.txt')
+
+        print("Training for iteration =",it)
+
         model = svmlight.learn(list(train), type='classification', verbosity=0, costratio=cost_factor)
-        svmlight.write_model(model, "models/"+dataset+"/model.dat")
-
-    else: 
-        pass
-
-    os.remove('train.txt')
+        if dump == "yes":
+            svmlight.write_model(model, "models/"+dataset+"/model.dat")
+        
+        predictions = svmlight.classify(model, test)
+        print("Predicted for iteration =",it)
+        accuracies, f1_micro, f1_rel, f1_unrel = evaluate(predictions, cost_factor)
+        print("The mean accuracy is", np.mean(accuracies))
+        print("The f1-score is", np.mean(f1_micro)) # micro: calculates metrics totally by counting the total true positives, false negatives and false positives
+        print("The credible f1-score is", np.mean(f1_rel)) # None: returns scores for each class
+        print("The non-credible f1-score is", np.mean(f1_unrel))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("dataset")
+parser.add_argument("dataset", choices=["CLEF","Sondhi","Schwarz"]) # CLEF, SONDHI, SCHWARZ
+parser.add_argument("dump", nargs='?', choices=["yes","no"], default = 'yes') # YES, NO 
+parser.add_argument("cost_factor", nargs='?', choices=["1","2","3"], default = "1") # 1, 2, 3
 args = parser.parse_args()
 dataset = args.dataset
+cost_factor = args.cost_factor
+dump = args.dump
 
-train(dataset)
+train(dataset, dump, cost_factor)
+
+
