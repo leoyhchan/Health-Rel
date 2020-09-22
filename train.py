@@ -2,7 +2,7 @@ import os
 import re
 import pickle
 import argparse
-# import svmlight
+import svmlight
 import numpy as np
 from bs4 import BeautifulSoup
 from collections import Counter
@@ -16,29 +16,35 @@ from sklearn.datasets import dump_svmlight_file, load_svmlight_file
 
 
 STOPWORDS = set(stopwords.words("english"))
-NEW_WORDS = ["using", "show", "result", "large", "also", "iv", "one", "two", "new", "previously", "shown","http","layout","cell","www","dwlayoutemptycell","div"]
+NEW_WORDS = ["using", "show", "result", "large", "also", "iv", "one", "two", "new", "previously", "shown", \
+             "http","layout","cell","www","dwlayoutemptycell","div"]
 STOPWORDS = STOPWORDS.union(STOPWORDS)
-COMM_LIST = ["buy","sell","cheap","deal","free","guarantee","shop","price"]
+COMM_LIST = ["buy", "sell", "cheap", "deal" ,"free", "guarantee", "shop", "price", "business", "trade", "interests", \
+             "expensive", "commerce", "ecommerce", "advertising", "sale", "market", "profitable", "lucrative", "ad", \
+             "advertisement", "seller", "vendor", "tradesman", "mercature", "vendor", "production", "transaction", \
+             "buying", "selling", "leasing", "industry", "company", "companies", "deal", "goods", "exchangeable", \
+             "retail price", "sold out", "in storage", "warehouse", "warrant", "value", "terms", "terms of payment"]   
 
-def evaluate(predictions, cost_factor):
-    tp = 0
-    tn = 0
-    fp = 0
-    fn = 0
-    for a, b in zip(val,predictions):
-            if np.sign(a) == np.sign(b): # true
-                    if np.sign(a) == -1:
-                            tn +=1
-                    else:
-                            tp += 1
-            else: # false
-                    if np.sign(a) == 1:
-                            fn += 1
-                    else: 
-                            fp += 1
+def weighted_accuracy(bias, tn, tp, fn, fp):
+    return (bias*tp+tn)/(bias*(tp+fn)+tn+fp) 
+
+def evaluate(predictions, val, cost_factor):
+    tp, tn, fp, fn = 0, 0, 0, 0
+    accuracies, f1_micro, f1_rel, f1_unrel = [], [], [], []
+
+    for a, b in zip(val, predictions):
+        if np.sign(a) == np.sign(b): # true
+            if np.sign(a) == -1:
+                    tn +=1
+            else:
+                    tp += 1
+        else: # false
+            if np.sign(a) == 1:
+                    fn += 1
+            else: 
+                    fp += 1
 
     accuracies.append(weighted_accuracy(cost_factor, tn, tp, fn, fp)*100)
-    it += 1
 
     predictions = np.array(predictions)
     predictions[predictions<0] = -1
@@ -67,26 +73,45 @@ def word_features(doc, vectorizer):
     vector = vectorizer.transform([doc])
     doc_to_list = list(vector.toarray()[0])
     maximum = max(doc_to_list)
+    
     if maximum:
         for val in doc_to_list:
-                index = doc_to_list.index(val)
-                doc_to_list[index] = val/maximum
+            index = doc_to_list.index(val)
+            doc_to_list[index] = val/maximum
+    
     return doc_to_list
 
 
 def count_commercial_keywords(filename, doc):
     commercial_words = 0
+
     with open(filename,encoding="utf-8",errors="ignore") as reader:
-            soup = BeautifulSoup(reader.read())
-            text = soup.get_text()
-            output = text.split(" ")
-            for line in output:
-                    for term in COMM_LIST:
-                            if term in line:
-                                    commercial_words += 1
-            doc = doc.split(" ")
+        soup = BeautifulSoup(reader.read())
+        text = soup.get_text()
+        output = text.split(" ")
+        
+        for line in output:
+            for term in COMM_LIST:
+                if term in line:
+                    commercial_words += 1
+        
+        doc = doc.split(" ")
+    
     return commercial_words/len(doc)
 
+def count_commercial_links(filename, z1):
+    with open(filename,encoding="utf-8",errors="ignore") as reader:
+        soup = BeautifulSoup(reader.read(),'html5lib')
+        links = Counter([x.get('href') for x in soup.findAll('a')])
+        links = links.most_common()
+        commercial = 0
+        
+        for item in links:
+            if item[0]: 
+                if any(ext in item[0] for ext in COMM_LIST):
+                    commercial += item[1]
+    
+    return commercial/z1
 
 def count_links(filename, z1):
     with open(filename,encoding="utf-8",errors="ignore") as reader:
@@ -97,24 +122,23 @@ def count_links(filename, z1):
         external = 0
         contact = 0
         privacy = 0
-        commercial = 0
         c_list = ["ContactUs", "ContactJudy", "Contact Us", "Contact Judy"]
-        p_list = ["PrivacyInformation", "PrivacyPolicy", "PrivacyStatement", "PrivacySecured", "Privacy Information", "Privacy Policy", "Privacy Statement", "Privacy Secured"]
+        p_list = ["PrivacyInformation", "PrivacyPolicy", "PrivacyStatement", "PrivacySecured", "Privacy Information", \
+                  "Privacy Policy", "Privacy Statement", "Privacy Secured"]
+        
         for item in links:
-                total += item[1]
-                if item[0]: 
-                        if item[0].startswith(('http','ftp','www')):
-                                external += item[1]
-                        if any(ext in item[0] for ext in c_list):
-                                contact = 1
-                        if any(ext in item[0] for ext in p_list):
-                                privacy = 1
-                        if any(ext in item[0] for ext in COMM_LIST):
-                                commercial += item[1]
+            total += item[1]
+            if item[0]: 
+                if item[0].startswith(('http','ftp','www')):
+                    external += item[1]
+                if any(ext in item[0] for ext in c_list):
+                    contact = 1
+                if any(ext in item[0] for ext in p_list):
+                    privacy = 1
+        
         internal = total - external
-        if total:
-                commercial = commercial/total
-    return total/z1, external/z1, internal/z1, contact, privacy, commercial
+    
+    return total/z1, external/z1, internal/z1, contact, privacy
 
 def features_calc(docs, corpus, vectorizer, features):
     z1 = 200 # empirical observed standardisation value
@@ -123,12 +147,13 @@ def features_calc(docs, corpus, vectorizer, features):
         doc_features = []
         
         if features == "link" or features == "all1" or features == "all2":
-            total, external, internal, contact, privacy, commercial = count_links(filename, z1)
-            doc_features.append(total, external, internal, contact, privacy, commercial)
+            total, external, internal, contact, privacy = count_links(filename, z1)
+            doc_features.append(total, external, internal, contact, privacy)
 
         if features == "comm" or features == "all1" or features == "all2":
+            commercial_links = count_commercial_links(filename, z1)
             commercial_words = count_commercial_keywords(filename, doc)
-            doc_features.append(commercial_words)
+            doc_features.append(commercial_links, commercial_words)
 
         if features == "words1" or features == "words2" or features == "all1" or features == "all2":
             words = word_features(doc, vectorizer)
@@ -146,41 +171,39 @@ def generate_vocabulary(corpus, min_df, dataset):
     return vectorizer
 
 def normalize_text(line, stop_words, features):
-    # Remove punctuations
-    line = re.sub('[^a-zA-Z]', ' ', line)
-    # Convert to lowercase
-    line = line.lower()
-    # remove tags
-    line = re.sub("&lt;/?.*?&gt;"," &lt;&gt; ",line)
-    # remove special characters and digits
-    line = re.sub("(\\d|\\W)+"," ",line)
-    ## Convert to list from string
-    line = line.split()
+    line = re.sub('[^a-zA-Z]', ' ', line) # remove punctuations
+    line = line.lower() # convert to lowercase
+    line = re.sub("&lt;/?.*?&gt;"," &lt;&gt; ", line) # remove tags
+    line = re.sub("(\\d|\\W)+"," ",line) # remove special characters and digits
+    line = line.split() # convert to list from string
     
-    ## Removing stopwords
     if features != "words2" and features != "all2":
-        line = [word for word in line if not word in stop_words]
+        line = [word for word in line if not word in stop_words] # remove stopwords
     
     line = " ".join(line)
     return line
 
 def preprocess_text(filename, stop_words, dataset):
     with open(filename,encoding="utf-8",errors="ignore") as reader:
-        soup = BeautifulSoup(reader.read(),'html5lib') # requests.get(url), when the service is implemented
+        soup = BeautifulSoup(reader.read(),'html5lib')
         text = soup.get_text()
         output = text.split("\n")
         lines = []
+        
         for line in output:
-                line = normalize_text(line, stop_words, dataset)
-                lines.append(line)
+            line = normalize_text(line, stop_words, dataset)
+            lines.append(line)
+        
         doc= " ".join(lines)
         return doc
 
 def generate_corpus(docs, stop_words, dataset):
     corpus = []
+    
     for doc in docs:
-            doc = preprocess_text(doc, stop_words, dataset)
-            corpus.append(doc)
+        doc = preprocess_text(doc, stop_words, dataset)
+        corpus.append(doc)
+    
     return corpus
 
 def data_sondhi():
@@ -193,19 +216,21 @@ def data_sondhi():
     arr2 = os.listdir('.')
     X = []
     Y = []
+    
     for rel,unrel in zip(arr1,arr2):
-            os.chdir('../reliable')
-            X.append('./datasets/Sondhi/reliable/'+rel)
-            Y.append(-1)
-            os.chdir('../unreliable')
-            X.append('./datasets/Sondhi/unreliable/'+unrel)
-            Y.append(1)
+        os.chdir('../reliable')
+        X.append('./datasets/Sondhi/reliable/'+rel)
+        Y.append(-1)
+        os.chdir('../unreliable')
+        X.append('./datasets/Sondhi/unreliable/'+unrel)
+        Y.append(1)
+    
     os.chdir(root)
     return np.array(X), np.array(Y)
 
 def feature_set():
     ext = False
-    opcion = 0
+    option = 0
     
     while not ext:
         print ("1. Link-based")
@@ -234,13 +259,15 @@ def feature_set():
 def adapt_test_to_svmlight(aux):
     test = []
     val = []
+    
     for element in aux:
         lst = list(element)
         val.append(lst[0])
         lst[0] = 0
         element = tuple(lst)
         test.append(element)
-    return test
+    
+    return test, val
 
 
 def train(dataset, dump, cost_factor):
@@ -257,12 +284,7 @@ def train(dataset, dump, cost_factor):
         n = 2
 
     skf = StratifiedKFold(n_splits=n)
-    accuracies = []
     it = 0
-    f1_micro = []
-    f1_rel = []
-    f1_unrel = []
-
 
     for train_index, test_index in skf.split(X,Y):
         data_train = X[train_index]
@@ -275,13 +297,13 @@ def train(dataset, dump, cost_factor):
 
         data_train = features_calc(data_train, corpus_train, vectorizer, features)
         target_train = Y[train_index]
-        scaler_x = preprocessing.StandardScaler().fit(list(data_train)) # Standardisation
+        scaler_x = preprocessing.StandardScaler().fit(list(data_train)) # standardisation
         data_train = scaler_x.transform(list(data_train))
         if dump == "yes":
             pickle.dump(scaler_x, open("models/"+dataset+"/scaler.pkl", "wb"))
 
         data_test = X[test_index]
-        corpus_test = generate_corpus(data_test, STOPWORDS)
+        corpus_test = generate_corpus(data_test, STOPWORDS, features)
         data_test = features_calc(data_test, corpus_test, vectorizer, features)
         target_test  = Y[test_index]
         data_test = scaler_x.transform(list(data_test))
@@ -291,7 +313,7 @@ def train(dataset, dump, cost_factor):
 
         train = svm_parse('train.txt')
         aux = svm_parse('test.txt')
-        test = adapt_test_to_svmlight(aux)
+        test, labels = adapt_test_to_svmlight(aux)
         os.remove('train.txt')
         os.remove('test.txt')
 
@@ -303,11 +325,12 @@ def train(dataset, dump, cost_factor):
         
         predictions = svmlight.classify(model, test)
         print("Predicted for iteration =",it)
-        accuracies, f1_micro, f1_rel, f1_unrel = evaluate(predictions, cost_factor)
+        accuracies, f1_micro, f1_rel, f1_unrel = evaluate(predictions, labels, cost_factor)
         print("The mean accuracy is", np.mean(accuracies))
         print("The f1-score is", np.mean(f1_micro)) # micro: calculates metrics totally by counting the total true positives, false negatives and false positives
         print("The credible f1-score is", np.mean(f1_rel)) # None: returns scores for each class
         print("The non-credible f1-score is", np.mean(f1_unrel))
+        it += 1
 
 parser = argparse.ArgumentParser()
 parser.add_argument("dataset", choices=["CLEF","Sondhi","Schwarz"]) # CLEF, SONDHI, SCHWARZ
