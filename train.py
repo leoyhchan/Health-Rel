@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import time
 import pickle
 import argparse
 import svmlight
@@ -84,7 +85,7 @@ def count_commercial_keywords(filename, doc):
     commercial_words = 0
 
     with open(filename,encoding="utf-8",errors="ignore") as reader:
-        soup = BeautifulSoup(reader.read())
+        soup = BeautifulSoup(reader.read(), 'html5lib')
         text = soup.get_text()
         output = text.split(" ")
         
@@ -235,10 +236,10 @@ def feature_set():
         print ("2. Link + Commercial")
         print ("3. Word-based (removing stopwords)")
         print ("4. Word-based (keeping stopwords)")
-        print ("5. All (removing stopwordsl)")
+        print ("5. All (removing stopwords)")
         print ("6. All (keeping stopwords)")
         print ("7. Exit experiment")
-        option = int(input("Choose a feature set:"))
+        option = int(input("Choose a feature set: "))
     
         if option == 1:
             return "link"
@@ -291,12 +292,18 @@ def train(dataset, dump, cost_factor):
     accuracies, f1_l, f1_rel_l, f1_unrel_l = [], [], [], []
 
     for train_index, test_index in skf.split(X, Y):
+        ts = str(time.time())
+
         data_train = X[train_index]
         corpus_train = generate_corpus(data_train, STOPWORDS, features)
         
         vectorizer = generate_vocabulary(corpus_train, min_df, dataset)
         if dump == "yes":
-            pickle.dump(vectorizer, open("models/"+dataset+"/vocabulary.pkl", "wb"))
+            
+            if not os.path.exists('./models/'+dataset):
+                os.makedirs('./models/'+dataset)
+            
+            pickle.dump(vectorizer, open("models/"+dataset+"/vocabulary_"+ts+".pkl", "wb"))
 
         data_train = features_calc(data_train, corpus_train, vectorizer, features)
         target_train = Y[train_index]
@@ -304,7 +311,7 @@ def train(dataset, dump, cost_factor):
         scaler_x = preprocessing.StandardScaler().fit(list_data_train) # standardisation
         data_train = scaler_x.transform(list_data_train)
         if dump == "yes":
-            pickle.dump(scaler_x, open("models/"+dataset+"/scaler.pkl", "wb"))
+            pickle.dump(scaler_x, open("models/"+dataset+"/scaler_"+ts+".pkl", "wb"))
 
         data_test = X[test_index]
         corpus_test = generate_corpus(data_test, STOPWORDS, features)
@@ -312,18 +319,21 @@ def train(dataset, dump, cost_factor):
         target_test  = Y[test_index]
         data_test = scaler_x.transform(list(data_test))
 
-        dump_svmlight_file(data_train, target_train, 'train.txt')
-        dump_svmlight_file(data_test,target_test,'test.txt')
+        if not os.path.exists('./aux'):
+            os.makedirs('./aux')
 
-        train = svm_parse('train.txt')
-        aux = svm_parse('test.txt')
+        dump_svmlight_file(data_train, target_train, './aux/train_'+ts+'.txt')
+        dump_svmlight_file(data_test,target_test,'./aux/test_'+ts+'.txt')
+
+        train = svm_parse('./aux/train_'+ts+'.txt')
+        aux = svm_parse( './aux/test_'+ts+'.txt')
         test, labels = adapt_test_to_svmlight(aux)
 
         print("Training for iteration =", it)
 
         model = svmlight.learn(list(train), type='classification', verbosity=0, costratio=cost_factor)
         if dump == "yes":
-            svmlight.write_model(model, "models/"+dataset+"/model.dat")
+            svmlight.write_model(model, "models/"+dataset+"/model_"+ts+".dat")
         
         predictions = svmlight.classify(model, test)
         print("Predicted for iteration =", it)
@@ -333,6 +343,8 @@ def train(dataset, dump, cost_factor):
         f1_rel_l.append(f1_rel)
         f1_unrel_l.append(f1_unrel)
         it += 1
+        os.remove('./aux/train_'+ts+'.txt')
+        os.remove('./aux/train_'+ts+'.txt')
 
     print("The mean accuracy is", np.mean(accuracies))
     print("The f1-score is", np.mean(f1_l)) # micro: calculates metrics totally by counting the total true positives, false negatives and false positives
@@ -350,6 +362,4 @@ cost_factor = int(args.cost_factor)
 dump = args.dump
 
 train(dataset, dump, cost_factor)
-os.remove('train.txt')
-os.remove('test.txt')
 
