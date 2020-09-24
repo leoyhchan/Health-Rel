@@ -205,6 +205,41 @@ def generate_corpus(docs, stop_words, dataset):
     
     return corpus
 
+def data_morris():
+    df = pd.read_excel("./datasets/Schwarz/web_credibility_relabeled.xlsx")
+    ratings = df['Likert Rating']
+    urls = df['URL']
+    root = os.getcwd()
+    path = './datasets/Schwarz/CachedPages'
+    os.chdir(path)
+    cached_pages_dir = os.getcwd()
+    X = []
+    Y = []
+    
+    for url,rating in zip(urls, ratings):
+        try:
+            url = url.replace('http://','')
+            url = url.split('/')
+            if url[-1]: # urls del estilo 'www.adamofficial.com/us/home'
+                    url = '/'.join(url[:-1])
+                    os.chdir(url)
+                    f = [f for f in os.listdir() if re.match(url[-1]+'*', f) and os.path.isfile(f)]
+            else:
+                    url = '/'.join(url)
+                    os.chdir(url)
+                    f = [f for f in os.listdir() if re.match('index*', f) and os.path.isfile(f)]
+            
+            X.append(os.path.join(os.getcwd(), f[0]))
+            Y.append(rating)
+            os.chdir(cached_pages_dir)
+
+        except:
+                pass
+    
+    os.chdir(root)
+    return np.array(X), np.array(Y)
+
+
 def data_clef():
     X = []
     Y = []
@@ -315,7 +350,11 @@ def save_results(dataset, features, cost_factor, accuracies, f1_l, f1_rel_l, f1_
         f.write("The credible f1-score is "+str(np.mean(f1_rel_l)))
         f.write("The non-credible f1-score is "+str(np.mean(f1_unrel_l)))
 
-
+def standard_scaler(data_train):
+    list_data_train = list(data_train)
+    scaler_x = preprocessing.StandardScaler().fit(list_data_train) # standardisation
+    data_train = scaler_x.transform(list_data_train)
+    return data_train
 
 def train(dataset, dump, cost_factor):
     if dataset == "CLEF":
@@ -355,9 +394,22 @@ def train(dataset, dump, cost_factor):
 
         data_train = features_calc(data_train, corpus_train, vectorizer, features)
         target_train = Y[train_index]
-        list_data_train = list(data_train)
-        scaler_x = preprocessing.StandardScaler().fit(list_data_train) # standardisation
-        data_train = scaler_x.transform(list_data_train)
+
+        if dataset == "Sondhi":
+            done = False
+            while not done:
+                option = input("Do you want to apply standar scaler preprocessing? [yes/no]")
+                if option == "yes":
+                    data_train = standard_scaler(data_train)
+                    done = True
+                elif option == "no":
+                    done = True
+                else:
+                    option = input("Please choose a correct option [yes/no]")
+        
+        else:
+            data_train = standard_scaler(data_train)
+
         if dump == "yes":
             pickle.dump(scaler_x, open("models/"+dataset+"/scaler_"+ts+".pkl", "wb"))
 
