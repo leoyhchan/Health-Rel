@@ -145,16 +145,16 @@ def features_calc(docs, corpus, vectorizer, features):
     for filename, doc in zip(docs, corpus):
         doc_features = []
         
-        if features == "link" or features == "comm" or features == "all1" or features == "all2":
+        if features == "link" or features == "comm" or features == "allRem" or features == "allKeep":
             links_counts = count_links(filename, z1)
             doc_features.extend(links_counts)
 
-        if features == "comm" or features == "all1" or features == "all2":
+        if features == "comm" or features == "allRem" or features == "allKeep":
             commercial_links = count_commercial_links(filename, z1)
             commercial_words = count_commercial_keywords(filename, doc)
             doc_features.extend([commercial_links, commercial_words])
 
-        if features == "words1" or features == "words2" or features == "all1" or features == "all2":
+        if features == "wordsRem" or features == "wordsKeep" or features == "allRem" or features == "allKeep":
             words = word_features(doc, vectorizer)
             doc_features.extend(words)
 
@@ -176,7 +176,7 @@ def normalize_text(line, stop_words, features):
     line = re.sub("(\\d|\\W)+"," ",line) # remove special characters and digits
     line = line.split() # convert to list from string
     
-    if features != "words2" and features != "all2":
+    if features != "wordsKeep" and features != "allKeep":
         line = [word for word in line if not word in stop_words] # remove stopwords
     
     line = " ".join(line)
@@ -204,6 +204,40 @@ def generate_corpus(docs, stop_words, dataset):
         corpus.append(doc)
     
     return corpus
+
+def data_clef():
+    X = []
+    Y = []
+    path = './datasets/CLEF/clef2018collection'
+    
+    if not os.path.exists(path):
+        print("Please first download and place CLEF collection in the correct folder, as explained in Readme.md")
+        sys.exit()
+
+    with open('./datasets/CLEF/CLEF2018_qtrust_20180914.txt',newline='') as assestments:
+        reader = csv.reader(assestments,delimiter=' ')
+        for row in reader:
+            web = row[2]
+            rating = int(row[3])
+
+            if rating == 0 or rating == 1 or rating == 2 or rating == 3: # Trustworthiness
+                for filename in Path(path).rglob(web):
+                    X.append(filename)
+                    break
+
+                    Y.append(1)
+
+            elif rating == 7 or rating == 8 or rating == 9 or rating == 10: 
+                for filename in Path(path).rglob(web):
+                    X.append(filename)
+                    break
+                  
+                    Y.append(-1)
+
+    print("Finished loading data...")
+    print("======================================")        
+    return np.array(X), np.array(Y)
+
 
 def data_sondhi():
     root = os.getcwd()
@@ -246,13 +280,13 @@ def feature_set():
         elif option == 2:
             return "comm"
         elif option == 3:
-            return "words1"
+            return "wordsRem"
         elif option == 4:
-            return "words2"
+            return "wordsKeep"
         elif option == 5:
-            return "all1"
+            return "allRem"
         elif option == 6:
-            return "all2"
+            return "allKeep"
         elif option == 7:
             sys.exit()
         else:
@@ -271,9 +305,22 @@ def adapt_test_to_svmlight(aux):
     
     return test, val
 
+def save_results(dataset, features, cost_factor, accuracies, f1_l, f1_rel_l, f1_unrel_l):
+    if not os.path.exists('./results'):
+        os.makedirs('./results')
+    
+    with open(dataset+"_results_"+features+"_"+cost_factor+".txt", "w+") as f:
+        f.write("The mean accuracy is "+str(np.mean(accuracies)))
+        f.write("The f1-score is "+str(np.mean(f1_l)))
+        f.write("The credible f1-score is "+str(np.mean(f1_rel_l)))
+        f.write("The non-credible f1-score is "+str(np.mean(f1_unrel_l)))
+
+
 
 def train(dataset, dump, cost_factor):
     if dataset == "CLEF":
+        X, Y = data_clef()
+        min_df = 0.4
         n = 5
     
     elif dataset == "Sondhi":
@@ -282,6 +329,7 @@ def train(dataset, dump, cost_factor):
         n = 5
     
     elif dataset == "Schwarz":
+        X, Y = data_morris()
         min_df = 0.5
         n = 2
 
@@ -350,6 +398,9 @@ def train(dataset, dump, cost_factor):
     print("The f1-score is", np.mean(f1_l)) # micro: calculates metrics totally by counting the total true positives, false negatives and false positives
     print("The credible f1-score is", np.mean(f1_rel_l)) # None: returns scores for each class
     print("The non-credible f1-score is", np.mean(f1_unrel_l))
+
+    if dump == "yes":
+        save_results(dataset, features, cost_factor, accuracies, f1_l, f1_rel_l, f1_unrel_l)
 
 np.random.seed(1)
 parser = argparse.ArgumentParser()
