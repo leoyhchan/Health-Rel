@@ -344,7 +344,7 @@ def train(dataset, dump, cost_factor):
         f1_unrel_l.append(f1_unrel)
         it += 1
         os.remove('./aux/train_'+ts+'.txt')
-        os.remove('./aux/train_'+ts+'.txt')
+        os.remove('./aux/test_'+ts+'.txt')
 
     print("The mean accuracy is", np.mean(accuracies))
     print("The f1-score is", np.mean(f1_l)) # micro: calculates metrics totally by counting the total true positives, false negatives and false positives
