@@ -344,7 +344,7 @@ def save_results(dataset, features, cost_factor, accuracies, f1_l, f1_rel_l, f1_
     if not os.path.exists('./results'):
         os.makedirs('./results')
     
-    with open(dataset+"_results_"+features+"_"+cost_factor+".txt", "w+") as f:
+    with open(dataset+"_results_"+features+"_"+str(cost_factor)+".txt", "w+") as f:
         f.write("The mean accuracy is "+str(np.mean(accuracies)))
         f.write("The f1-score is "+str(np.mean(f1_l)))
         f.write("The credible f1-score is "+str(np.mean(f1_rel_l)))
@@ -354,7 +354,7 @@ def standard_scaler(data_train):
     list_data_train = list(data_train)
     scaler_x = preprocessing.StandardScaler().fit(list_data_train) # standardisation
     data_train = scaler_x.transform(list_data_train)
-    return data_train
+    return data_train, scaler_x
 
 def train(dataset, dump, cost_factor):
     if dataset == "CLEF":
@@ -377,6 +377,20 @@ def train(dataset, dump, cost_factor):
 
     features = feature_set()
     accuracies, f1_l, f1_rel_l, f1_unrel_l = [], [], [], []
+    standard = True
+
+    if dataset == "Sondhi":
+        done = False
+        while not done:
+            option = input("Do you want to apply standar scaler preprocessing? [yes/no] ")
+            if option == "yes":
+                done = True
+            elif option == "no":
+                standard = False
+                done = True
+            else:
+                print("Option not valid")
+                done = False
 
     for train_index, test_index in skf.split(X, Y):
         ts = str(time.time())
@@ -395,35 +409,25 @@ def train(dataset, dump, cost_factor):
         data_train = features_calc(data_train, corpus_train, vectorizer, features)
         target_train = Y[train_index]
 
-        if dataset == "Sondhi":
-            done = False
-            while not done:
-                option = input("Do you want to apply standar scaler preprocessing? [yes/no]")
-                if option == "yes":
-                    data_train = standard_scaler(data_train)
-                    done = True
-                elif option == "no":
-                    done = True
-                else:
-                    option = input("Please choose a correct option [yes/no]")
-        
-        else:
-            data_train = standard_scaler(data_train)
+        if standard:
+            data_train, scaler_x = standard_scaler(data_train)
 
-        if dump == "yes":
+        if standard and dump == "yes":
             pickle.dump(scaler_x, open("models/"+dataset+"/scaler_"+ts+".pkl", "wb"))
 
         data_test = X[test_index]
         corpus_test = generate_corpus(data_test, STOPWORDS, features)
         data_test = features_calc(data_test, corpus_test, vectorizer, features)
         target_test  = Y[test_index]
-        data_test = scaler_x.transform(list(data_test))
+
+        if standard:
+            data_test = scaler_x.transform(list(data_test))
 
         if not os.path.exists('./aux'):
             os.makedirs('./aux')
 
         dump_svmlight_file(data_train, target_train, './aux/train_'+ts+'.txt')
-        dump_svmlight_file(data_test,target_test,'./aux/test_'+ts+'.txt')
+        dump_svmlight_file(list(data_test),target_test,'./aux/test_'+ts+'.txt')
 
         train = svm_parse('./aux/train_'+ts+'.txt')
         aux = svm_parse( './aux/test_'+ts+'.txt')
