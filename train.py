@@ -163,11 +163,8 @@ def features_calc(docs, corpus, vectorizer, features):
         yield doc_features
 
 def generate_vocabulary(corpus, min_df, dataset):
-    vectorizer = None
-
-    if dataset != "CLEF":
-        vectorizer = CountVectorizer(min_df=min_df)
-        vectorizer.fit(corpus)
+    vectorizer = CountVectorizer(min_df=min_df)
+    vectorizer.fit(corpus)
     
     return vectorizer
 
