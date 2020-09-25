@@ -5,6 +5,8 @@ import time
 import pickle
 import argparse
 import svmlight
+import xlrd
+import pandas as pd
 import numpy as np
 from bs4 import BeautifulSoup
 from collections import Counter
@@ -344,11 +346,11 @@ def save_results(dataset, features, cost_factor, accuracies, f1_l, f1_rel_l, f1_
     if not os.path.exists('./results'):
         os.makedirs('./results')
     
-    with open(dataset+"_results_"+features+"_"+str(cost_factor)+".txt", "w+") as f:
-        f.write("The mean accuracy is "+str(np.mean(accuracies)))
-        f.write("The f1-score is "+str(np.mean(f1_l)))
-        f.write("The credible f1-score is "+str(np.mean(f1_rel_l)))
-        f.write("The non-credible f1-score is "+str(np.mean(f1_unrel_l)))
+    with open("./results/"+dataset+"_results_"+features+"_"+str(cost_factor)+".txt", "w+") as f:
+        f.write("The mean accuracy is "+str(np.mean(accuracies))+"\n")
+        f.write("The f1-score is "+str(np.mean(f1_l))+"\n")
+        f.write("The credible f1-score is "+str(np.mean(f1_rel_l))+"\n")
+        f.write("The non-credible f1-score is "+str(np.mean(f1_unrel_l))+"\n")
 
 def standard_scaler(data_train):
     list_data_train = list(data_train)
@@ -426,7 +428,7 @@ def train(dataset, dump, cost_factor):
         if not os.path.exists('./aux'):
             os.makedirs('./aux')
 
-        dump_svmlight_file(data_train, target_train, './aux/train_'+ts+'.txt')
+        dump_svmlight_file(list(data_train), target_train, './aux/train_'+ts+'.txt')
         dump_svmlight_file(list(data_test),target_test,'./aux/test_'+ts+'.txt')
 
         train = svm_parse('./aux/train_'+ts+'.txt')
