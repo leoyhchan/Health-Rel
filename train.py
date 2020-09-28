@@ -1,29 +1,28 @@
+import os
+import re
+import csv
+import sys
+import pickle
+import argparse
+import svmlight
 import numpy as np
 import pandas as pd
-import requests
-import csv
-import os
-import svmlight
-import random
-import re
-import nltk
-import time 
-import matplotlib.pyplot as plt
-import pickle
+from pathlib import Path
 from bs4 import BeautifulSoup
 from collections import Counter
-from sklearn.model_selection import KFold, StratifiedKFold
-from sklearn.metrics import f1_score
-from nltk.corpus import stopwords
-from nltk.tokenize import RegexpTokenizer
-from pathlib import Path
-from w3lib.html import remove_tags
 from sklearn import preprocessing
+from nltk.corpus import stopwords
+from w3lib.html import remove_tags
+from nltk.tokenize import RegexpTokenizer
+from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics import f1_score
 from sklearn.datasets import dump_svmlight_file, load_svmlight_file
-from sklearn.decomposition import PCA
-from pandas import DataFrame, read_csv
 
+
+STOPWORDS = set(stopwords.words("english"))
+NEW_WORDS = ["using", "show", "result", "large", "also", "iv", "one", "two", "new", "previously", "shown","http","layout","cell","www","dwlayoutemptycell","div"]
+STOPWORDS = STOPWORDS.union(STOPWORDS)
 COMM_LIST = ["buy", "sell", "cheap", "deal" ,"free", "guarantee", "shop", "price", "business", "trade", "interests", \
              "expensive", "commerce", "ecommerce", "advertising", "sale", "market", "profitable", "lucrative", "ad", \
              "advertisement", "seller", "vendor", "tradesman", "mercature", "vendor", "production", "transaction", \
@@ -137,7 +136,7 @@ def count_links(filename,z1,comm_list):
         return total/z1, external/z1, internal/z1, contact, privacy
 
 
-def features_calc(docs,corpus,vectorizer,stop_words):
+def features_calc(docs,corpus,vectorizer):
         count = 0
         z1 = 200
         comm_list = ["buy","sell","cheap","deal","free","guarantee","shop","price"]
@@ -162,7 +161,7 @@ def generate_vocabulary(corpus):
         vectorizer.fit(corpus)
         return vectorizer
 
-def __normalize_text(line,stop_words):
+def __normalize_text(line):
         # Remove punctuations
         line = re.sub('[^a-zA-Z]', ' ', line)
         # Convert to lowercase
@@ -179,26 +178,26 @@ def __normalize_text(line,stop_words):
         ######## COMMENT THIS LINE FOR KEEPING STOPWORDS #######
         ########################################################
 
-        line = [word for word in line if not word in stop_words]
+        line = [word for word in line if not word in STOPWORDS]
         line = " ".join(line)
         return line
 
-def preprocess_text(filename,stop_words):
+def preprocess_text(filename):
         with open(filename,encoding="utf-8",errors="ignore") as reader:
                 soup = BeautifulSoup(reader.read(),'html5lib') # requests.get(url), when the service is implemented
                 text = soup.get_text()
                 output = text.split("\n")
                 lines = []
                 for line in output:
-                      line = __normalize_text(line,stop_words)
+                      line = __normalize_text(line)
                       lines.append(line)
                 doc= " ".join(lines)
                 return doc
 
-def generate_corpus(docs,stop_words):
+def generate_corpus(docs):
         corpus = []
         for doc in docs:
-                doc = preprocess_text(doc,stop_words)
+                doc = preprocess_text(doc)
                 corpus.append(doc)
         return corpus
 
@@ -289,38 +288,83 @@ def generate_train_and_test():
         os.chdir("../")
         return np.array(X), np.array(Y)
 
-X, Y = generate_train_and_test() # ECIR
-# X_train, Y_train = generate_train_and_test_morris() # MORRIS
-# X,Y = generate_train_and_test_clef() # CLEF E HEALTH
-# print(len(X))
-# print(len(Y))
-stop_words = set(stopwords.words("english"))
-new_words = ["using", "show", "result", "large", "also", "iv", "one", "two", "new", "previously", "shown","http","layout","cell","www","dwlayoutemptycell","div"]
-stop_words = stop_words.union(new_words)
-skf = StratifiedKFold(n_splits=5) # stratified k-fold preserves the percentage of samples for each class
-np.random.seed(1) # reproducibility
+def feature_set():
+    ext = False
+    option = 0
+    
+    while not ext:
+        print ("1. Link-based")
+        print ("2. Commercial")
+        print ("3. Word-based (with stopword removal)")
+        print ("4. Word-based (without stopword removal)")
+        print ("5. All (with stopword removal)")
+        print ("6. All (without stopword removal)")
+        option = int(input("Choose a feature set:"))
+    
+        if option == 1:
+            return "link"
+        elif option == 2:
+            return "comm"
+        elif option == 3:
+            return "words1"
+        elif option == 4:
+            return "words2"
+        elif option == 5:
+            return "all1"
+        elif option == 6:
+            return "all2"
+        else:
+            print ("Not valid option")
 
-for bias in range(3): # bias: cost-factor, by which training errors on positive examples (unreliable) outweight errors on negative ones (reliable). Missing an unreliable one is more dangerous
+
+parser = argparse.ArgumentParser()
+parser.add_argument("dataset", choices=["CLEF","Sondhi","Schwarz"]) # CLEF, SONDHI, SCHWARZ
+parser.add_argument("dump", nargs='?', choices=["yes","no"], default = 'yes') # YES, NO 
+args = parser.parse_args()
+dataset = args.dataset
+dump = args.dump
+standard = True
+
+
+if dataset == "Sondhi":
+        X, Y = generate_train_and_test()
+        
+
+elif dataset == "Schwarz":
+        X_train, Y_train = generate_train_and_test_morris()
+
+elif dataset == "CLEF":
+        X,Y = generate_train_and_test_clef() # CLEF E HEALTH
+
+else: 
+        print("Unknown dataset")
+        sys.exit(1)
+
+
+np.random.seed(1) # reproducibility
+skf = StratifiedKFold(n_splits=5) # stratified k-fold preserves the percentage of samples for each class
+features = feature_set()
+
+for cost_factor in range(3):
 
         accuracies = []
-        it = 1
         f1_micro = []
         f1_rel = []
         f1_unrel = []
+        it = 1
 
         for train_index, test_index in skf.split(X,Y):
 
                 data_train   = X[train_index]
-                corpus_train = generate_corpus(data_train, stop_words)
+                corpus_train = generate_corpus(data_train)
                 vectorizer = generate_vocabulary(corpus_train) # for each fold we reset vocabulary associated to training set
-                # os.chdir("/opt/catenae/model_data")
-                # pickle.dump(vectorizer, open("vocabulary.pkl","wb"))
-                data_train = features_calc(data_train, corpus_train, vectorizer, stop_words)
+                
+                if dump == "yes":
+                        pickle.dump(vectorizer, open("models/vocabulary_"+dataset+"_it"+it+"_cost_fact"+cost_factor+"_"++".pkl","wb"))
+                
+                data_train = features_calc(data_train, corpus_train, vectorizer, features)
                 target_train = Y[train_index]
                 unique,counts = np.unique(target_train,return_counts=True)
-                dictionary = dict(zip(unique, counts))
-                print(dict(zip(unique, counts)))
-                # data_train_res,target_train_res = smote_tomek(np.array(list(data_train)),np.array(target_train)) # Hybrid sampling
 
                 ## Scaling
                 # list_data_train = list(data_train)
