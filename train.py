@@ -20,15 +20,27 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import f1_score
 from sklearn.datasets import dump_svmlight_file, load_svmlight_file
 
+def load_stopwords():
+        with open("stopwords.txt") as file:
+                stopwords = [word.rstrip() for word in file.readlines()]
 
-STOPWORDS = set(stopwords.words("english"))
-NEW_WORDS = ["using", "show", "result", "large", "also", "iv", "one", "two", "new", "previously", "shown","http","layout","cell","www","dwlayoutemptycell","div"]
-STOPWORDS = STOPWORDS.union(NEW_WORDS)
-COMM_LIST = ["buy", "sell", "cheap", "deal" ,"free", "guarantee", "shop", "price", "business", "trade", "interests", \
-             "expensive", "commerce", "ecommerce", "advertising", "sale", "market", "profitable", "lucrative", "ad", \
-             "advertisement", "seller", "vendor", "tradesman", "mercature", "vendor", "production", "transaction", \
-             "buying", "selling", "leasing", "industry", "company", "companies", "deal", "goods", "exchangeable", \
-             "retail price", "sold out", "in storage", "warehouse", "warrant", "value", "terms", "terms of payment"]
+        return stopwords
+
+def load_commercial_words():
+        with open("comm_list.txt") as file:
+                comm_list = [word.rstrip() for word in file.readlines()]
+
+        return comm_list
+
+def save_results(dataset, features, cost_factor, ts, accuracies, f1_l, f1_rel_l, f1_unrel_l):
+        if not os.path.exists('./results'):
+                os.makedirs('./results')
+        
+        with open("./results/"+dataset+"_results_"+features+"_cost_fact"+str(cost_factor+1)+"_"+ts+".txt", "w+") as f:
+                f.write("The mean accuracy is "+str(np.mean(accuracies))+"\n")
+                f.write("The f1-score is "+str(np.mean(f1_l))+"\n")
+                f.write("The credible f1-score is "+str(np.mean(f1_rel_l))+"\n")
+                f.write("The non-credible f1-score is "+str(np.mean(f1_unrel_l))+"\n")
 
 def evaluate(predictions):
         tp, tn, fp, fn = 0, 0, 0, 0
@@ -347,6 +359,11 @@ dataset = args.dataset
 dump = args.dump
 standard = True # we apply standard scaler by default
 
+STOPWORDS = set(stopwords.words("english"))
+NEW_WORDS = load_stopwords()
+STOPWORDS = STOPWORDS.union(NEW_WORDS)
+COMM_LIST = load_commercial_words()
+
 if dataset == "Sondhi":
         X, Y = data_sondhi()
         n = 5
@@ -461,5 +478,6 @@ for cost_factor in range(3):
 
         print("The accuracy is", np.mean(accuracies))
         print("The f1-score is", np.mean(f1_micro)) # micro: calculates metrics totally by counting the total true positives, false negatives and false positives
-        print("The f1-score per class is", np.mean(f1_rel), np.mean(f1_unrel)) # None: returns scores for each class
-
+        print("The credible f1-score is", np.mean(f1_rel))
+        print("The non-credible f1-score is", np.mean(f1_unrel)) # None: returns scores for each class
+        save_results(dataset, features, cost_factor, ts, accuracies, f1_micro, f1_rel, f1_unrel)
