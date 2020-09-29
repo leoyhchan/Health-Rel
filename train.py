@@ -261,8 +261,7 @@ def data_clef():
                 reader = csv.reader(assestments,delimiter=' ')
                 for row in reader:
                         web = row[2]
-                        rating = float(row[3])
-                        rating = int(rating)
+                        rating = int(row[3])
 
                         if rating == 0 or rating == 1 or rating == 2 or rating == 3: # Trustworthiness
                                 for filename in Path('./datasets/CLEF/clef2018collection').rglob(web):
