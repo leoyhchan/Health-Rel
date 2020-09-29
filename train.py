@@ -20,14 +20,26 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import f1_score
 from sklearn.datasets import dump_svmlight_file, load_svmlight_file
 
+def load_privacy_words():
+        with open("lexicon/privacy.txt") as file:
+                privacy = [word.rstrip() for word in file.readlines()]
+
+        return privacy
+
+def load_contact_words():
+        with open("lexicon/contact.txt") as file:
+                contact = [word.rstrip() for word in file.readlines()]
+
+        return contact
+
 def load_stopwords():
-        with open("stopwords.txt") as file:
+        with open("lexicon/stopwords.txt") as file:
                 stopwords = [word.rstrip() for word in file.readlines()]
 
         return stopwords
 
 def load_commercial_words():
-        with open("comm_list.txt") as file:
+        with open("lexicon/comm_list.txt") as file:
                 comm_list = [word.rstrip() for word in file.readlines()]
 
         return comm_list
@@ -131,7 +143,7 @@ def count_commercial_keywords(filename, doc):
                 text = soup.get_text()
                 output = text.split(" ")
                 for line in output:
-                        for term in COMM_LIST:
+                        for term in COMMERCIAL:
                                 if term in line:
                                         commercial_words += 1
                 doc = doc.split(" ")
@@ -147,7 +159,7 @@ def count_commercial_links(filename, z1):
         
         for item in links:
             if item[0]: 
-                if any(ext in item[0] for ext in COMM_LIST):
+                if any(ext in item[0] for ext in COMMERCIAL):
                     commercial += item[1]
     
     return commercial/z1
@@ -161,17 +173,16 @@ def count_links(filename, z1):
             external = 0
             contact = 0
             privacy = 0
-            c_list = ["ContactUs", "ContactJudy", "Contact Us", "Contact Judy"]
-            p_list = ["PrivacyInformation", "PrivacyPolicy", "PrivacyStatement", "PrivacySecured", "Privacy Information", "Privacy Policy", "Privacy Statement", "Privacy Secured"]
+            p_list = []
             
             for item in links:
                     total += item[1]
                     if item[0]: 
                             if item[0].startswith(('http','ftp','www')):
                                     external += item[1]
-                            if any(ext in item[0] for ext in c_list):
+                            if any(ext in item[0] for ext in CONTACT):
                                     contact = 1
-                            if any(ext in item[0] for ext in p_list):
+                            if any(ext in item[0] for ext in PRIVACY):
                                     privacy = 1
                                     
             internal = total - external
@@ -362,7 +373,9 @@ standard = True # we apply standard scaler by default
 STOPWORDS = set(stopwords.words("english"))
 NEW_WORDS = load_stopwords()
 STOPWORDS = STOPWORDS.union(NEW_WORDS)
-COMM_LIST = load_commercial_words()
+COMMERCIAL = load_commercial_words()
+CONTACT = load_contact_words()
+PRIVACY = load_privacy_words()
 
 if dataset == "Sondhi":
         X, Y = data_sondhi()
