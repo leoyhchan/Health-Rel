@@ -411,6 +411,7 @@ np.random.seed(1) # reproducibility
 skf = StratifiedKFold(n_splits=n) # stratified k-fold preserves the percentage of samples for each class
 features = feature_set()
 ts = str(time.time())
+print("EXPERIMENT ID: ", ts)
 
 for cost_factor in range(3):
 
@@ -467,8 +468,8 @@ for cost_factor in range(3):
                 
                 dump_svmlight_file(data_test, target_test, 'aux/test_'+ts+'.txt')
                         
-                train = svm_parse('train.txt')
-                aux = svm_parse('test.txt')
+                train = svm_parse('aux/train_'+ts+'.txt')
+                aux = svm_parse('aux/test_'+ts+'.txt')
                 test, val = adapt_to_svmlight_format(aux)
                 
                 print("Training it=", it, "cost-factor=", cost_factor+1) 
