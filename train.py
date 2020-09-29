@@ -434,7 +434,10 @@ for cost_factor in range(3):
                         nsamples, nx = data_train.shape
                         data_train = data_train.reshape((nsamples, nx))
                 
-                dump_svmlight_file(data_train, target_train, 'train.txt')
+                if not os.path.exists('./aux'):
+                        os.makedirs('./aux')
+
+                dump_svmlight_file(data_train, target_train, 'aux/train_'+ts+'.txt')
 
                 data_test = X[test_index]
                 corpus_test = generate_corpus(data_test, features)
@@ -449,7 +452,7 @@ for cost_factor in range(3):
                         nsamples, nx = data_test.shape
                         data_test = data_test.reshape((nsamples, nx))
                 
-                dump_svmlight_file(data_test, target_test, 'test.txt')
+                dump_svmlight_file(data_test, target_test, 'aux/test_'+ts+'.txt')
                         
                 train = svm_parse('train.txt')
                 aux = svm_parse('test.txt')
