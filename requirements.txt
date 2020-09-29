@@ -1,13 +1,11 @@
-bs4==4.9.1
+bs4==0.0.1
 nltk==3.5
 html5lib==1.1
 scikit-learn==0.22.1
-svmlight==0.4
-pickle==4.0
+pickle-mixin==1.0.2
 argparse==1.1
 numpy==1.19.1
 pandas==0.25.3
 xlrd==1.2.0
 pathlib==1.0.1
-collections==2.4
 w3lib==1.21.0
