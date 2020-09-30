@@ -376,6 +376,8 @@ COMMERCIAL = load_commercial_words()
 CONTACT = load_contact_words()
 PRIVACY = load_privacy_words()
 
+features = feature_set() # select feature combination
+
 if dataset == "Sondhi":
         X, Y = data_sondhi()
         n = 5
@@ -408,7 +410,6 @@ else:
 
 np.random.seed(1) # reproducibility
 skf = StratifiedKFold(n_splits=n) # stratified k-fold preserves the percentage of samples for each class
-features = feature_set()
 ts = str(time.time())
 print("EXPERIMENT ID: ", ts)
 
