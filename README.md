@@ -53,9 +53,25 @@ This will install all necessary dependencies inside the environment.
 
 ## Re-running experiments
 
-As said before, the main 
+To re-run the experiments, the following command can be used:
 
-## Output files and expected results
+```
+python train.py [CLEF/Sondhi/Schwarz] [link/comm/wordsRem/wordsKeep/allRem/allKeep] [yes/no]
+```
+
+The first argument is mandatory and it allows to select between the different datasets available. The second argument is also mandatory and it lets the user choose the **feature combination** that he/she wants to test. Finally, the third argument is optional and it allows to decide if the generated models during the training process are saved. By default, it is set to ```yes```.
+
+**IMPORTANT!!!**: CLEF experiments should be hold in a server due to storage and time requirements (these experiments can last between 48-72-h). The recommended option is sending them to background:
+
+```
+nohup python train.py CLEF [link/comm/wordsRem/wordsKeep/allRem/allKeep] [yes/no] &
+```
+
+## Output files
+
+A ```results``` folder will be generated in which we will be able to check the obtained performance for each cost-factor. Moreover, if dump argument was set to ```yes```, a folder called ```models``` will contain the generated files (models, vocabulary, and scaler) during the training process.
+
+Finally, an ```aux``` folder will be created to keep the intermediate files during training. 
 
 # References
 
