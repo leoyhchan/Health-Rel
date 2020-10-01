@@ -20,30 +20,46 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import f1_score
 from sklearn.datasets import dump_svmlight_file, load_svmlight_file
 
+'''
+This function loads the privacy links lexicon
+'''
 def load_privacy_words():
         with open("lexicon/privacy.txt") as file:
                 privacy = [word.rstrip() for word in file.readlines()]
 
         return privacy
 
+'''
+This function loads the contact links lexicon
+'''
 def load_contact_words():
         with open("lexicon/contact.txt") as file:
                 contact = [word.rstrip() for word in file.readlines()]
 
         return contact
 
+
+'''
+This function loads the stopwords lexicon
+'''
 def load_stopwords():
         with open("lexicon/stopwords.txt") as file:
                 stopwords = [word.rstrip() for word in file.readlines()]
 
         return stopwords
 
+'''
+This function loads the commercial words lexicon
+'''
 def load_commercial_words():
         with open("lexicon/comm_list.txt") as file:
                 comm_list = [word.rstrip() for word in file.readlines()]
 
         return comm_list
 
+'''
+This function saves in a file the obtained performance for a concrete cost-factor and feature set
+'''
 def save_results(dataset, features, cost_factor, ts, accuracies, f1_l, f1_rel_l, f1_unrel_l):
         if not os.path.exists('./results'):
                 os.makedirs('./results')
@@ -54,6 +70,9 @@ def save_results(dataset, features, cost_factor, ts, accuracies, f1_l, f1_rel_l,
                 f.write("The credible f1-score is "+str(np.mean(f1_rel_l))+"\n")
                 f.write("The non-credible f1-score is "+str(np.mean(f1_unrel_l))+"\n")
 
+'''
+This function evaluates the obtained predictions and returns the number of true positives, true negatives, false positives and false negatives
+'''
 def evaluate(predictions):
         tp, tn, fp, fn = 0, 0, 0, 0
         for a, b in zip(val,predictions):
@@ -70,6 +89,10 @@ def evaluate(predictions):
 
         return tp, tn, fp, fn
 
+
+'''
+This function removes the label from the test instances and replaces it with 0 values (svmlight specific format)
+'''
 def adapt_to_svmlight_format(aux):
         test = []
         val = []
@@ -83,9 +106,15 @@ def adapt_to_svmlight_format(aux):
 
         return test, val
 
-def weighted_accuracy(bias,tn,tp,fn,fp):
+'''
+This function implements the weighted accuracy metric described in Sondhi's study
+'''
+def weighted_accuracy(bias, tn, tp, fn, fp):
         return (bias*tp+tn)/(bias*(tp+fn)+tn+fp) 
 
+'''
+This function loads a svmlight file and parses it into its specific format
+'''
 def svm_parse(filename):
     
     features,target = load_svmlight_file(filename)
@@ -99,57 +128,44 @@ def svm_parse(filename):
             it+=1
             yield (int(cl),doc_features)
 
-def transform_to_svm_light_format(data_train_res,target_train_res,data_test_res,target_test_res):
-        train = []
-        test = []
-
-        for data,target in zip(data_train_res,target_train_res):
-                mod_data = []
-                list_of_groups = zip(*(iter(data),)*2)
-
-                for element in list_of_groups:
-                        mod_data.append(element)
-                train.append((target,mod_data))
-
-        for data,target in zip(data_test_res,target_test_res):
-                mod_data = []
-                list_of_groups = zip(*(iter(data),)*2)
-
-                for element in list_of_groups:
-                        mod_data.append(element)
-                test.append((target,mod_data))
-        
-        return train,test 
-
-def append_word_features(doc_features,words):
-        for val in words:
-                doc_features.append(val)
-
-def word_features(doc,vectorizer):
+'''
+This function calculates the word-based features as their normalized frequency value
+'''
+def word_features(doc, vectorizer):
         vector = vectorizer.transform([doc])
         doc_to_list = list(vector.toarray()[0])
         maximum = max(doc_to_list)
+
         if maximum:
                 for val in doc_to_list:
                         index = doc_to_list.index(val)
                         doc_to_list[index] = val/maximum
+        
         return doc_to_list
 
+'''
+This function counts the total commercial interest words appearances and returns the normalized frequency total value
+'''
 def count_commercial_keywords(filename, doc):
         commercial_words = 0
         
         with open(filename,encoding="utf-8",errors="ignore") as reader:
-                soup = BeautifulSoup(reader.read(), 'html5lib') # requests.get(url), when the service is implemented
+                soup = BeautifulSoup(reader.read(), 'html5lib')
                 text = soup.get_text()
                 output = text.split(" ")
+
                 for line in output:
                         for term in COMMERCIAL:
                                 if term in line:
                                         commercial_words += 1
+                
                 doc = doc.split(" ")
         
         return commercial_words/len(doc)
 
+'''
+This function counts the number of commercial links present in a webpage
+'''
 def count_commercial_links(filename, z1):
     with open(filename,encoding="utf-8",errors="ignore") as reader:
         soup = BeautifulSoup(reader.read(), 'html5lib')
@@ -164,9 +180,12 @@ def count_commercial_links(filename, z1):
     
     return commercial/z1
 
+'''
+This function calculates the link-based features
+'''
 def count_links(filename, z1):
         with open(filename,encoding="utf-8",errors="ignore") as reader:
-            soup = BeautifulSoup(reader.read(),'html5lib') # requests.get(url), when the service is implemented
+            soup = BeautifulSoup(reader.read(),'html5lib')
             links = Counter([x.get('href') for x in soup.findAll('a')])
             links = links.most_common()
             total = 0
@@ -187,9 +206,11 @@ def count_links(filename, z1):
                                     
             internal = total - external
 
-        return total/z1, external/z1, internal/z1, contact, privacy
+        return total/z1, external/z1, internal/z1, contact, privacy # presence of contact and privacy links are boolean features
 
-
+'''
+This function implements the whole casuistic of feature combinations
+'''
 def features_calc(docs, corpus, vectorizer, features):
     z1 = 200 # empirical observed standardisation value
 
@@ -211,11 +232,17 @@ def features_calc(docs, corpus, vectorizer, features):
 
         yield doc_features
 
+'''
+This function generates the vocabulary for a given corpus
+'''
 def generate_vocabulary(corpus, min_df):
         vectorizer = CountVectorizer(min_df=min_df)
         vectorizer.fit(corpus)
         return vectorizer
 
+'''
+This function normalizes a text to be used as a ML algorithm input
+'''
 def __normalize_text(line, features):
         line = re.sub('[^a-zA-Z]', ' ', line) # remove punctuations
         line = line.lower() # convert to lowercase
@@ -229,6 +256,9 @@ def __normalize_text(line, features):
         line = " ".join(line)
         return line
 
+'''
+This function extracts clean text from a given HTML file
+'''
 def preprocess_text(filename, features):
         with open(filename,encoding="utf-8",errors="ignore") as reader:
                 soup = BeautifulSoup(reader.read(), 'html5lib') 
@@ -243,6 +273,9 @@ def preprocess_text(filename, features):
                 doc= " ".join(lines)
                 return doc
 
+'''
+This function generates an entire clean corpus from HTML files
+'''
 def generate_corpus(docs, features):
         corpus = []
         
@@ -252,8 +285,14 @@ def generate_corpus(docs, features):
         
         return corpus
 
-
+'''
+This function loads the CLEF dataset
+'''
 def data_clef():
+        if not os.path.exists('./datasets/CLEF/clef2018collection'):
+                print("To perform these experiments you first need to download clef2018collection")
+                sys.exit(1)
+                
         X = []
         Y = []
 
@@ -263,13 +302,13 @@ def data_clef():
                         web = row[2]
                         rating = int(row[3])
 
-                        if rating == 0 or rating == 1 or rating == 2 or rating == 3: # Trustworthiness
-                                for filename in Path('./datasets/CLEF/clef2018collection').rglob(web):
+                        if rating == 0 or rating == 1 or rating == 2 or rating == 3: # relabelling process 
+                                for filename in Path('./datasets/CLEF/clef2018collection').rglob(web): # this fucntion finds recursively a file in an entire path
                                         X.append(filename)
                                         break
                                 Y.append(1)
 
-                        elif rating == 7 or rating == 8 or rating == 9 or rating == 10: 
+                        elif rating == 7 or rating == 8 or rating == 9 or rating == 10: # relabelling process 
                                 for filename in Path('./datasets/CLEF/clef2018collection').rglob(web):
                                         X.append(filename)
                                         break
@@ -277,6 +316,9 @@ def data_clef():
       
         return np.array(X), np.array(Y)
 
+'''
+This function loads the Schwarz dataset
+'''
 def data_schwarz():
         df = pd.read_excel("./datasets/Schwarz/web_credibility_relabeled.xlsx")
         ratings = df['Likert Rating']
@@ -292,7 +334,7 @@ def data_schwarz():
                 try:
                         url = url.replace('http://','')
                         url = url.split('/')
-                        if url[-1]: # urls del estilo 'www.adamofficial.com/us/home'
+                        if url[-1]: # this case deals with urls like 'www.adamofficial.com/us/home'
                                 url = '/'.join(url[:-1])
                                 os.chdir(url)
                                 f = [f for f in os.listdir() if re.match(url[-1]+'*',f) and os.path.isfile(f)]
@@ -311,6 +353,9 @@ def data_schwarz():
         os.chdir(root)
         return np.array(X), np.array(Y)
 
+'''
+This function loads the Sondhi dataset
+'''
 def data_sondhi():
         path1 = './datasets/Sondhi/reliable'
         root = os.getcwd()
@@ -333,43 +378,15 @@ def data_sondhi():
         os.chdir(root)
         return np.array(X), np.array(Y)
 
-def feature_set():
-    ext = False
-    option = 0
-    
-    while not ext:
-        print ("1. Link-based")
-        print ("2. Commercial")
-        print ("3. Word-based (with stopword removal)")
-        print ("4. Word-based (without stopword removal)")
-        print ("5. All (with stopword removal)")
-        print ("6. All (without stopword removal)")
-        option = int(input("Choose a feature set: "))
-
-        if option == 1:
-            return "link"
-        elif option == 2:
-            return "comm"
-        elif option == 3:
-            return "wordsRem"
-        elif option == 4:
-            return "wordsKeep"
-        elif option == 5:
-            return "allRem"
-        elif option == 6:
-            return "allKeep"
-        else:
-            print ("Not valid option")
-
 parser = argparse.ArgumentParser()
 parser.add_argument("dataset", choices=["CLEF", "Sondhi", "Schwarz"]) # DATASETS
-parser.add_argument("features", choices=["link", "comm", "wordsRem", "wordsKeep", "allRem", "allKeep"])
+parser.add_argument("features", choices=["link", "comm", "wordsRem", "wordsKeep", "allRem", "allKeep"]) # FEATURE SETS
 parser.add_argument("dump", nargs='?', choices=["yes", "no"], default = 'yes') # DUMP
 args = parser.parse_args()
 dataset = args.dataset
-features = args.features # select feature combination
+features = args.features
 dump = args.dump
-standard = True # we apply standard scaler by default
+standard = True # by default, we apply standard scaler 
 
 STOPWORDS = set(stopwords.words("english"))
 NEW_WORDS = load_stopwords()
@@ -380,7 +397,7 @@ PRIVACY = load_privacy_words()
 
 if dataset == "Sondhi":
         X, Y = data_sondhi()
-        n = 5
+        n = 5 
         min_df = 1
         
         done = False
@@ -408,11 +425,14 @@ else:
         print("Unknown dataset")
         sys.exit(1)
 
-np.random.seed(1) # reproducibility
-skf = StratifiedKFold(n_splits=n) # stratified k-fold preserves the percentage of samples for each class
+np.random.seed(1) # reproducibility seed
+skf = StratifiedKFold(n_splits=n) # stratified k-fold: preserves the percentage of samples for each class
 ts = str(time.time())
-print("EXPERIMENT ID: ", ts)
+print("EXPERIMENT ID: ", ts) # we use the timestamp as experiment id
 
+'''
+For each cost-factor, we perform a n-fold cross validation for the feature set previously selected
+'''
 for cost_factor in range(3):
 
         accuracies, f1_micro, f1_rel, f1_unrel = [], [], [], []
@@ -474,7 +494,7 @@ for cost_factor in range(3):
                 
                 print("Training it=", it, "cost-factor=", cost_factor+1) 
 
-                model = svmlight.learn(list(train), type='classification', verbosity=0, costratio=cost_factor+1) ## Costratio = cost-factor
+                model = svmlight.learn(list(train), type='classification', verbosity=0, costratio=cost_factor+1) ## costratio = cost-factor
                 
                 if dump == "yes":
                         svmlight.write_model(model, "models/model_"+dataset+"_"+features+"_it"+str(it)+"_cost_fact"+str(cost_factor+1)+"_"+ts+".dat")
@@ -487,14 +507,14 @@ for cost_factor in range(3):
                 predictions = np.array(predictions)
                 predictions[predictions<0] = -1
                 predictions[predictions>0] = 1
-                f1_micro.append(f1_score(val,predictions,average='micro'))
-                cl = f1_score(val, predictions, average=None)
+                f1_micro.append(f1_score(val,predictions,average='micro')) # micro: calculates metrics totally by counting the total true positives, false negatives and false positives
+                cl = f1_score(val, predictions, average=None) # none: returns scores for each class
                 f1_rel.append(cl[0])
                 f1_unrel.append(cl[1])
                 it+=1
 
         print("The accuracy is", np.mean(accuracies))
-        print("The f1-score is", np.mean(f1_micro)) # micro: calculates metrics totally by counting the total true positives, false negatives and false positives
+        print("The f1-score is", np.mean(f1_micro)) 
         print("The credible f1-score is", np.mean(f1_rel))
-        print("The non-credible f1-score is", np.mean(f1_unrel)) # None: returns scores for each class
+        print("The non-credible f1-score is", np.mean(f1_unrel)) 
         save_results(dataset, features, cost_factor, ts, accuracies, f1_micro, f1_rel, f1_unrel)
