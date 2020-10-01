@@ -362,10 +362,12 @@ def feature_set():
             print ("Not valid option")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("dataset", choices=["CLEF", "Sondhi", "Schwarz"]) # CLEF, SONDHI, SCHWARZ
-parser.add_argument("dump", nargs='?', choices=["yes", "no"], default = 'yes') # YES, NO 
+parser.add_argument("dataset", choices=["CLEF", "Sondhi", "Schwarz"]) # DATASETS
+parser.add_argument("features", choices=["link", "comm", "wordsRem", "wordsKeep", "allRem", "allKeep"])
+parser.add_argument("dump", nargs='?', choices=["yes", "no"], default = 'yes') # DUMP
 args = parser.parse_args()
 dataset = args.dataset
+features = args.features # select feature combination
 dump = args.dump
 standard = True # we apply standard scaler by default
 
@@ -375,8 +377,6 @@ STOPWORDS = STOPWORDS.union(NEW_WORDS)
 COMMERCIAL = load_commercial_words()
 CONTACT = load_contact_words()
 PRIVACY = load_privacy_words()
-
-features = feature_set() # select feature combination
 
 if dataset == "Sondhi":
         X, Y = data_sondhi()
