@@ -35,8 +35,7 @@ On the other hand, there are two main directories in this repository. The first 
 
 ```Sondhi``` folder [2] contains two subfolders which divide the given webpages in reliable and unreliable examples. This dataset was facilitated to us by original study authors. 
 
-```Schwarz``` folder [3] is formed by a set of cached webpages. This dataset was created during research and it was extracted from the following link...
-It must be noticed that a relabelled ground truth is also provided, following the relabelling process described in [1].
+```Schwarz``` folder [3] is formed by a set of cached webpages. This dataset was created during their research and it was extracted from the following link [here](http://research.microsoft.com/credibility). It must be noticed that a relabelled ground truth is also provided, following the relabelling process described in [1].
 
 ```CLEF``` folder [4] only contains the gorund truth file with the trustworthiness assessments. In this case, it was not possible to place the full dataset in this repo due to size problems. Anyone that would like to reproduce CLEF experiments, can download the dataset from  [here](https://www.dropbox.com/s/ixnqt33u5xeelth/clef2018collection.tar.gz?dl=0). This will return a ```tar.gz``` file, which needs to be extracted as a subfolder of CLEF in order experiments to properly work. 
 
