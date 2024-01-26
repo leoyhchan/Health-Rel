@@ -1,4 +1,3 @@
-#!/bin/bash
 conda env create -f environment.yml
 cd python3-svmlight/
 python3 setup.py install
