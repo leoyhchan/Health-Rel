@@ -1,3 +1,5 @@
+
+# %%
 import os
 import re
 import csv
@@ -19,7 +21,7 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import f1_score
 from sklearn.datasets import dump_svmlight_file, load_svmlight_file
-
+# %%
 '''
 This function loads the privacy links lexicon
 '''
@@ -378,11 +380,27 @@ def data_sondhi():
         os.chdir(root)
         return np.array(X), np.array(Y)
 
+# %%
+def save_raw_results(results, seed, standard, dataset, features, cost_factor, ts, accuracies, f1_l, f1_rel_l, f1_unrel_l):
+        df = pd.DataFrame({
+               'seed': seed,
+               'dataset': dataset,
+               'features': features,
+               'standard': standard,
+               "cost_factor": cost_factor+1,
+                "accuracies": accuracies,
+                "f1_micro": f1_l,
+                "f1_rel": f1_rel_l,
+                "f1_unrel": f1_unrel_l,
+        })
+        return pd.concat([results, df])
+
+# %%
 parser = argparse.ArgumentParser()
 parser.add_argument("dataset", choices=["CLEF", "Sondhi", "Schwarz"]) # DATASETS
 parser.add_argument("features", choices=["link", "comm", "wordsRem", "wordsKeep", "allRem", "allKeep"]) # FEATURE SETS
 parser.add_argument("dump", nargs='?', choices=["yes", "no"], default = 'yes') # DUMP
-args = parser.parse_args()
+args = parser.parse_args('Sondhi allKeep'.split())
 dataset = args.dataset
 features = args.features
 dump = args.dump
@@ -402,7 +420,8 @@ if dataset == "Sondhi":
         
         done = False
         while not done:
-                option = input("Do you want to apply standar scaler preprocessing? [yes/no]: ")
+                option = "yes"
+                # option = input("Do you want to apply standar scaler preprocessing? [yes/no]: ")
                 if option == "yes":
                         done = True
                 elif option == "no":
@@ -410,7 +429,7 @@ if dataset == "Sondhi":
                         done = True
                 else:
                         print("Incorrect option")
-
+        print('standard:', standard)
 elif dataset == "Schwarz":
         X, Y = data_schwarz()
         n = 2 
@@ -425,96 +444,104 @@ else:
         print("Unknown dataset")
         sys.exit(1)
 
-np.random.seed(1) # reproducibility seed
-skf = StratifiedKFold(n_splits=n) # stratified k-fold: preserves the percentage of samples for each class
-ts = str(time.time())
-print("EXPERIMENT ID: ", ts) # we use the timestamp as experiment id
+# %%
+results = pd.DataFrame()
+for features in ['allRem', 'allKeep']:
+        for seed in range(1,3):
+                np.random.seed(seed) # reproducibility seed
+                skf = StratifiedKFold(n_splits=n) # stratified k-fold: preserves the percentage of samples for each class
+                ts = str(time.time())
+                print("EXPERIMENT ID: ", ts) # we use the timestamp as experiment id
+                '''
+                For each cost-factor, we perform a n-fold cross validation for the feature set previously selected
+                '''
+                for cost_factor in range(3):
 
-'''
-For each cost-factor, we perform a n-fold cross validation for the feature set previously selected
-'''
-for cost_factor in range(3):
+                        accuracies, f1_micro, f1_rel, f1_unrel = [], [], [], []
+                        it = 1
 
-        accuracies, f1_micro, f1_rel, f1_unrel = [], [], [], []
-        it = 1
+                        for train_index, test_index in skf.split(X,Y):
 
-        for train_index, test_index in skf.split(X,Y):
+                                data_train   = X[train_index]
+                                corpus_train = generate_corpus(data_train, features)
+                                vectorizer = generate_vocabulary(corpus_train, min_df) # for each fold we reset vocabulary associated to training set
+                                
+                                if dump == "yes":
 
-                data_train   = X[train_index]
-                corpus_train = generate_corpus(data_train, features)
-                vectorizer = generate_vocabulary(corpus_train, min_df) # for each fold we reset vocabulary associated to training set
-                
-                if dump == "yes":
+                                        if not os.path.exists('./models'):
+                                                os.makedirs('./models')
 
-                        if not os.path.exists('./models'):
-                                os.makedirs('./models')
+                                        pickle.dump(vectorizer, open("models/vocabulary_"+dataset+"_"+features+"_it"+str(it)+"_cost_fact"+str(cost_factor+1)+"_"+ts+".pkl","wb"))
+                                
+                                data_train = features_calc(data_train, corpus_train, vectorizer, features)
+                                target_train = Y[train_index]
 
-                        pickle.dump(vectorizer, open("models/vocabulary_"+dataset+"_"+features+"_it"+str(it)+"_cost_fact"+str(cost_factor+1)+"_"+ts+".pkl","wb"))
-                
-                data_train = features_calc(data_train, corpus_train, vectorizer, features)
-                target_train = Y[train_index]
+                                if standard:
+                                        list_data_train = list(data_train)
+                                        scaler_x = preprocessing.StandardScaler().fit(list_data_train)
+                                        
+                                        if dump == "yes":
+                                                pickle.dump(scaler_x, open("models/scaler_"+dataset+"_"+features+"_it"+str(it)+"_cost_fact"+str(cost_factor+1)+"_"+ts+".pkl","wb"))
+                                        
+                                        data_train = scaler_x.transform(list_data_train)
+                                
+                                elif not standard:
+                                        data_train = np.array(list(data_train))
+                                        nsamples, nx = data_train.shape
+                                        data_train = data_train.reshape((nsamples, nx))
+                                
+                                if not os.path.exists('./aux'):
+                                        os.makedirs('./aux')
 
-                if standard:
-                        list_data_train = list(data_train)
-                        scaler_x = preprocessing.StandardScaler().fit(list_data_train)
-                        
-                        if dump == "yes":
-                                pickle.dump(scaler_x, open("models/scaler_"+dataset+"_"+features+"_it"+str(it)+"_cost_fact"+str(cost_factor+1)+"_"+ts+".pkl","wb"))
-                        
-                        data_train = scaler_x.transform(list_data_train)
-                
-                elif not standard:
-                        data_train = np.array(list(data_train))
-                        nsamples, nx = data_train.shape
-                        data_train = data_train.reshape((nsamples, nx))
-                
-                if not os.path.exists('./aux'):
-                        os.makedirs('./aux')
+                                dump_svmlight_file(data_train, target_train, 'aux/train_'+ts+'.txt')
 
-                dump_svmlight_file(data_train, target_train, 'aux/train_'+ts+'.txt')
+                                data_test = X[test_index]
+                                corpus_test = generate_corpus(data_test, features)
+                                data_test = features_calc(data_test, corpus_test, vectorizer, features)
+                                target_test  = Y[test_index]
+                                
+                                if standard:
+                                        data_test = scaler_x.transform(list(data_test))
+                                
+                                elif not standard:
+                                        data_test = np.array(list(data_test))
+                                        nsamples, nx = data_test.shape
+                                        data_test = data_test.reshape((nsamples, nx))
+                                
+                                dump_svmlight_file(data_test, target_test, 'aux/test_'+ts+'.txt')
+                                        
+                                train = svm_parse('aux/train_'+ts+'.txt')
+                                aux = svm_parse('aux/test_'+ts+'.txt')
+                                test, val = adapt_to_svmlight_format(aux)
+                                
+                                print("Training it=", it, "cost-factor=", cost_factor+1) 
 
-                data_test = X[test_index]
-                corpus_test = generate_corpus(data_test, features)
-                data_test = features_calc(data_test, corpus_test, vectorizer, features)
-                target_test  = Y[test_index]
-                
-                if standard:
-                        data_test = scaler_x.transform(list(data_test))
-                
-                elif not standard:
-                        data_test = np.array(list(data_test))
-                        nsamples, nx = data_test.shape
-                        data_test = data_test.reshape((nsamples, nx))
-                
-                dump_svmlight_file(data_test, target_test, 'aux/test_'+ts+'.txt')
-                        
-                train = svm_parse('aux/train_'+ts+'.txt')
-                aux = svm_parse('aux/test_'+ts+'.txt')
-                test, val = adapt_to_svmlight_format(aux)
-                
-                print("Training it=", it, "cost-factor=", cost_factor+1) 
+                                model = svmlight.learn(list(train), type='classification', verbosity=0, costratio=cost_factor+1) ## costratio = cost-factor
+                                
+                                if dump == "yes":
+                                        svmlight.write_model(model, "models/model_"+dataset+"_"+features+"_it"+str(it)+"_cost_fact"+str(cost_factor+1)+"_"+ts+".dat")
 
-                model = svmlight.learn(list(train), type='classification', verbosity=0, costratio=cost_factor+1) ## costratio = cost-factor
-                
-                if dump == "yes":
-                        svmlight.write_model(model, "models/model_"+dataset+"_"+features+"_it"+str(it)+"_cost_fact"+str(cost_factor+1)+"_"+ts+".dat")
+                                predictions = svmlight.classify(model, test)
+                                print("Predicting it=", it, "cost-factor=", cost_factor+1) 
 
-                predictions = svmlight.classify(model, test)
-                print("Predicting it=", it, "cost-factor=", cost_factor+1) 
+                                tp, tn, fp, fn = evaluate(predictions)
+                                accuracies.append(weighted_accuracy(cost_factor+1,tn,tp,fn,fp)*100)
+                                predictions = np.array(predictions)
+                                predictions[predictions<0] = -1
+                                predictions[predictions>0] = 1
+                                f1_micro.append(f1_score(val,predictions,average='micro')) # micro: calculates metrics totally by counting the total true positives, false negatives and false positives
+                                cl = f1_score(val, predictions, average=None) # none: returns scores for each class
+                                f1_rel.append(cl[0])
+                                f1_unrel.append(cl[1])
+                                it+=1
 
-                tp, tn, fp, fn = evaluate(predictions)
-                accuracies.append(weighted_accuracy(cost_factor+1,tn,tp,fn,fp)*100)
-                predictions = np.array(predictions)
-                predictions[predictions<0] = -1
-                predictions[predictions>0] = 1
-                f1_micro.append(f1_score(val,predictions,average='micro')) # micro: calculates metrics totally by counting the total true positives, false negatives and false positives
-                cl = f1_score(val, predictions, average=None) # none: returns scores for each class
-                f1_rel.append(cl[0])
-                f1_unrel.append(cl[1])
-                it+=1
+                        print("The accuracy is", np.mean(accuracies))
+                        print("The f1-score is", np.mean(f1_micro)) 
+                        print("The credible f1-score is", np.mean(f1_rel))
+                        print("The non-credible f1-score is", np.mean(f1_unrel)) 
+                        save_results(dataset, features, cost_factor, ts, accuracies, f1_micro, f1_rel, f1_unrel)
+                        results = save_raw_results(results, seed, standard, dataset, features, cost_factor, ts, accuracies, f1_micro, f1_rel, f1_unrel)
 
-        print("The accuracy is", np.mean(accuracies))
-        print("The f1-score is", np.mean(f1_micro)) 
-        print("The credible f1-score is", np.mean(f1_rel))
-        print("The non-credible f1-score is", np.mean(f1_unrel)) 
-        save_results(dataset, features, cost_factor, ts, accuracies, f1_micro, f1_rel, f1_unrel)
+results
+
+# %%
