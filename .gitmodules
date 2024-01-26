@@ -1,0 +1,3 @@
+[submodule "python3-svmlight"]
+	path = python3-svmlight
+	url = https://github.com/jeremija/python3-svmlight.git
