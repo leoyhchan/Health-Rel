@@ -1,4 +1,22 @@
+This repo contains code for the reproduction of [Reliability Prediction for Health-Related Content: A Replicability Study](https://link.springer.com/chapter/10.1007/978-3-030-72240-1_4). The original repo of the paper can be found [here](https://github.com/MarcosFP97/Health-Rel).
+
+This repo builds on top of the original paper with the following additions.
+
+- `environment.yml` - A conda environment file created based on the requirements and specification of the original environment.
+- `build.bat` - For setting up the environment in windows.
+- `/nhst` - Contains cross-validation scores and script for significance testing
+
+This repo also adds a fork of the dependency, [python3-svmlight](https://github.com/jeremija/python3-svmlight), as submodule. The fork contains the prebuilt library on Windows. If you intend to run this code on Windows, you are suggested to fetch the submodule using
+
+```bash
+git submodule init
+git submodule update
+```
+
+Content that follows originates from the [repository for Reliability Prediction for Health-related Content: A Replicability Study](https://github.com/MarcosFP97/Health-Rel)
+
 # Health-Rel
+
 This is the official repository for **Reliability Prediction for Health-related Content: A Replicability Study** [1]. It contains all the necessary **code** and **files** to reproduce the experiments shown in our study.
 
 ## Repo structure
