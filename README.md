@@ -1,4 +1,4 @@
-This repo contains code for the reproduction of [Reliability Prediction for Health-Related Content: A Replicability Study](https://link.springer.com/chapter/10.1007/978-3-030-72240-1_4). The original repo of the paper can be found [here](https://github.com/MarcosFP97/Health-Rel).
+This repo contains code for the reproduction of [Reliability Prediction for Health-Related Content: A Replicability Study](https://doi.org/10.1007/978-3-030-72240-1_4). The original repo of the paper can be found [here](https://github.com/MarcosFP97/Health-Rel).
 
 This repo builds on top of the original paper with the following additions.
 
